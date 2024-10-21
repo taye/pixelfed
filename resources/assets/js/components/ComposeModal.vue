@@ -810,13 +810,6 @@
 							</div>
 						</div>
 					</div>
-
-                    <div v-else-if="page == 'filteringMedia'" class="w-100 h-100 py-5">
-                        <div class="d-flex flex-column align-items-center justify-content-center py-5">
-                            <b-spinner small />
-                            <p class="font-weight-bold mt-3">Applying filters...</p>
-                        </div>
-                    </div>
 				</div>
 
 				<!-- card-footers -->
@@ -867,8 +860,6 @@ export default {
 			composeText: '',
 			composeTextLength: 0,
 			nsfw: false,
-			filters: [],
-			currentFilter: false,
 			ids: [],
 			media: [],
 			files: [],
@@ -899,7 +890,6 @@ export default {
 			},
 
 			namedPages: [
-                'filteringMedia',
 				'cropPhoto',
 				'tagPeople',
 				'addLocation',
@@ -1020,15 +1010,11 @@ export default {
 			collectionsPage: 1,
 			collectionsCanLoadMore: false,
 			spoilerText: undefined,
-            isFilteringMedia: false,
-            filteringMediaTimeout: undefined,
-            filteringRemainingCount: 0,
             isPosting: false,
 		}
 	},
 
     created() {
-        this.filterEffects = filterEffects
         this.editor = createEditor({
             effects: filterEffects,
 		    onEdit: (index, {effect, intensity, crop}) => {
@@ -1051,7 +1037,6 @@ export default {
 	},
 
 	beforeMount() {
-		this.filters = window.App.util.filters.sort();
 		axios.get('/api/compose/v0/settings')
 		.then(res => {
 			this.composeSettings = res.data;
@@ -1188,11 +1173,6 @@ export default {
 			} else {
 				this.page = 2
 			}
-		},
-
-		toggleFilter(e, filter) {
-			this.media[this.carouselCursor].filter_class = filter;
-			this.currentFilter = filter;
 		},
 
 		async mediaUpload() {
@@ -1724,77 +1704,6 @@ export default {
 				this.cameraRollMedia = res.data;
 			});
 		},
-
-		applyFilterToMedia() {
-			// this is where the magic happens
-			var ua = navigator.userAgent.toLowerCase();
-			if(ua.indexOf('firefox') == -1 && ua.indexOf('chrome') == -1) {
-                this.isPosting = false;
-			 	swal('Oops!', 'Your browser does not support the filter feature.', 'error');
-                this.page = 3;
-			 	return;
-			}
-
-            let count = this.media.filter(m => m.filter_class).length;
-            if(count) {
-                this.page = 'filteringMedia';
-                this.filteringRemainingCount = count;
-                this.$nextTick(() => {
-                    this.isFilteringMedia = true;
-                    this.media.forEach((media, idx) => this.applyFilterToMediaSave(media, idx));
-                })
-            } else {
-                this.page = 3;
-            }
-		},
-
-        applyFilterToMediaSave(media, idx) {
-            if(!media.filter_class) {
-                return;
-            }
-
-            let self = this;
-            let data = null;
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            let image = document.createElement('img');
-            image.src = media.url;
-            image.addEventListener('load', e => {
-                canvas.width = image.width;
-                canvas.height = image.height;
-                ctx.filter = App.util.filterCss[media.filter_class];
-                ctx.drawImage(image, 0, 0, image.width, image.height);
-                ctx.save();
-                canvas.toBlob(function(blob) {
-                    data = new FormData();
-                    data.append('file', blob);
-                    data.append('id', media.id);
-                    axios.post('/api/compose/v0/media/update', data)
-                    .then(res => {
-                        self.media[idx].is_filtered = true;
-                        self.updateFilteringMedia();
-                    }).catch(err => {
-                    });
-                });
-            }, media.mime, 0.9);
-            ctx.clearRect(0, 0, image.width, image.height);
-        },
-
-        updateFilteringMedia() {
-            this.filteringRemainingCount--;
-            this.filteringMediaTimeout = setTimeout(() => this.filteringMediaTimeoutJob(), 500);
-        },
-
-        filteringMediaTimeoutJob() {
-            if(this.filteringRemainingCount === 0) {
-                this.isFilteringMedia = false;
-                clearTimeout(this.filteringMediaTimeout);
-                setTimeout(() => this.compose(), 500);
-            } else {
-                clearTimeout(this.filteringMediaTimeout);
-                this.filteringMediaTimeout = setTimeout(() => this.filteringMediaTimeoutJob(), 1000);
-            }
-        },
 
 		tagSearch(input) {
 			if (input.length < 1) { return []; }
